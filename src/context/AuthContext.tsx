@@ -3,7 +3,7 @@ import {
   User, 
   signInWithPopup, 
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   signOut as firebaseSignOut,
   onAuthStateChanged
 } from 'firebase/auth';
@@ -11,6 +11,14 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase/config';
 
 export const ADMIN_EMAIL = 'havenclothingindia@gmail.com';
+export const FOUNDER_EMAIL = 'garvitsharma2212@gmail.com';
+
+// Approved administrator accounts with dashboard access
+export const APPROVED_ADMIN_EMAILS = [
+  ADMIN_EMAIL.toLowerCase(),
+  FOUNDER_EMAIL.toLowerCase()
+];
+
 export const FOUNDERS = [
   { name: 'Garvit Sharma', role: 'Co-Founder & Creative Director' },
   { name: 'Ankit Meena', role: 'Co-Founder & Operations Lead' }
@@ -24,7 +32,7 @@ interface AuthContextType {
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
-  registerAdmin: (email: string, pass: string, name: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   authError: string | null;
   clearAuthError: () => void;
@@ -42,10 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
       if (currentUser) {
-        const email = currentUser.email?.toLowerCase() || '';
-        const isMasterAdmin = email === ADMIN_EMAIL.toLowerCase();
+        const email = (currentUser.email || '').toLowerCase().trim();
+        const isMasterAdmin = APPROVED_ADMIN_EMAILS.includes(email);
 
         // Check if UID exists in /adminUsers
         let hasAdminDoc = false;
@@ -61,26 +68,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             role = adminSnap.data().role || 'admin';
             displayName = adminSnap.data().name || displayName;
           } else if (isMasterAdmin) {
-            // Auto bootstrap admin document for havenclothingindia@gmail.com
+            // Auto bootstrap admin document for authorized founder/master admin
+            const isGarvit = email === FOUNDER_EMAIL.toLowerCase();
+            const fallbackName = isGarvit ? 'Garvit Sharma (Founder)' : 'HAVEN Clothing Admin';
             await setDoc(adminDocRef, {
-              email: ADMIN_EMAIL,
-              name: 'Garvit & Ankit (Haven Founders)',
+              email: email,
+              name: displayName || fallbackName,
               role: 'founder',
               createdAt: new Date().toISOString()
             });
             hasAdminDoc = true;
             role = 'founder';
-            displayName = 'Haven Admin';
+            displayName = displayName || fallbackName;
           }
         } catch (err) {
-          console.warn('Admin check note:', err);
+          console.warn('Admin Firestore verification notice:', err);
         }
 
         const isUserAdmin = isMasterAdmin || hasAdminDoc;
-        setIsAdmin(isUserAdmin);
+
+        // Security Enforcement: Immediately reject and sign out unauthorized users
+        if (!isUserAdmin) {
+          console.warn(`[Security Alert] Unauthorized sign-in attempt rejected for: ${email}`);
+          await firebaseSignOut(auth);
+          setUser(null);
+          setIsAdmin(false);
+          setIsFounder(false);
+          setAdminName('');
+          setAuthError(`Access Denied: The account (${email}) is not an authorized HAVEN administrator. Only approved store admins can access this dashboard.`);
+          setLoading(false);
+          return;
+        }
+
+        setUser(currentUser);
+        setIsAdmin(true);
         setIsFounder(isMasterAdmin || role === 'founder');
-        setAdminName(displayName || (isMasterAdmin ? 'Founders (Garvit & Ankit)' : 'Store Admin'));
+        setAdminName(displayName || (email === ADMIN_EMAIL.toLowerCase() ? 'Founders (Garvit & Ankit)' : 'Store Admin'));
       } else {
+        setUser(null);
         setIsAdmin(false);
         setIsFounder(false);
         setAdminName('');
@@ -97,7 +122,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
       console.error('Google Sign-In failed:', err);
-      setAuthError(err.message || 'Google Sign-In failed. Please try again.');
+      if (err.code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+        setAuthError(`UNAUTHORIZED_DOMAIN:${host}`);
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setAuthError('Google sign-in popup was closed before completing authentication.');
+      } else if (err.code === 'auth/cancelled-popup-request') {
+        // Ignored
+      } else {
+        setAuthError(err.message || 'Google Sign-In failed. Please try again.');
+      }
       throw err;
     }
   };
@@ -110,10 +144,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Email sign in failed:', err);
       if (err.code === 'auth/operation-not-allowed') {
         setAuthError(
-          'Email/Password provider is not enabled in Firebase Console. Please use "Sign in with Google" using havenclothingindia@gmail.com.'
+          'OPERATION_NOT_ALLOWED: Email/Password sign-in provider is disabled in Firebase Console. Please enable "Email/Password" in Firebase Authentication > Sign-in method.'
         );
-      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        setAuthError('Invalid credentials. Check your email and password.');
+      } else if (
+        err.code === 'auth/user-not-found' || 
+        err.code === 'auth/invalid-credential' || 
+        err.code === 'auth/wrong-password'
+      ) {
+        setAuthError(
+          'INVALID_CREDENTIALS: No account found or password incorrect for this admin email. If you have not created this user in Firebase Authentication yet, follow the secure setup steps below.'
+        );
+      } else if (err.code === 'auth/too-many-requests') {
+        setAuthError('Too many failed attempts. Access to this account has been temporarily disabled. Please reset password or try again later.');
       } else {
         setAuthError(err.message || 'Sign in failed');
       }
@@ -121,25 +163,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const registerAdmin = async (email: string, pass: string, name: string) => {
+  const sendPasswordReset = async (email: string) => {
     setAuthError(null);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
-      // Create admin document
-      await setDoc(doc(db, 'adminUsers', cred.user.uid), {
-        email: email.trim().toLowerCase(),
-        name: name.trim(),
-        role: email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() ? 'founder' : 'admin',
-        createdAt: new Date().toISOString()
-      });
+      await sendPasswordResetEmail(auth, email.trim());
     } catch (err: any) {
-      console.error('Admin registration failed:', err);
-      if (err.code === 'auth/operation-not-allowed') {
-        setAuthError(
-          'Email/Password sign-up is not enabled in Firebase Console. Please use "Sign in with Google" using havenclothingindia@gmail.com.'
-        );
+      console.error('Password reset failed:', err);
+      if (err.code === 'auth/user-not-found') {
+        setAuthError('No Firebase user exists for this email address. Please create the user in Firebase Console first.');
       } else {
-        setAuthError(err.message || 'Registration failed');
+        setAuthError(err.message || 'Failed to send password reset email.');
       }
       throw err;
     }
@@ -148,6 +181,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     try {
       await firebaseSignOut(auth);
+      setUser(null);
+      setIsAdmin(false);
+      setIsFounder(false);
+      setAdminName('');
     } catch (err) {
       console.error('Sign out error:', err);
     }
@@ -165,7 +202,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         loginWithGoogle,
         loginWithEmail,
-        registerAdmin,
+        sendPasswordReset,
         logout,
         authError,
         clearAuthError
