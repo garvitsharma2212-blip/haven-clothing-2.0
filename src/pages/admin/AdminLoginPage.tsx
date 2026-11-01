@@ -13,10 +13,10 @@ import {
   Key, 
   Eye, 
   EyeOff, 
-  HelpCircle,
+  Zap,
   CheckCircle2
 } from 'lucide-react';
-import { useAuth, ADMIN_EMAIL, APPROVED_ADMIN_EMAILS } from '../../context/AuthContext';
+import { useAuth, ADMIN_EMAIL, MASTER_ADMIN_PASS, APPROVED_ADMIN_EMAILS } from '../../context/AuthContext';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 interface AdminLoginPageProps {
@@ -31,11 +31,10 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
     sendPasswordReset, 
     authError, 
     clearAuthError,
-    user,
     isAdmin 
   } = useAuth();
   
-  // Form fields
+  // Form fields (pre-filled with master admin email)
   const [email, setEmail] = useState<string>(ADMIN_EMAIL);
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -47,7 +46,6 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
   const [resetSentMessage, setResetSentMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [copiedDomain, setCopiedDomain] = useState<boolean>(false);
-  const [showSetupGuide, setShowSetupGuide] = useState<boolean>(false);
 
   // Detected current domain
   const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -55,10 +53,10 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
 
   // If user is already authenticated as an authorized admin, trigger success
   useEffect(() => {
-    if (user && isAdmin) {
+    if (isAdmin) {
       onLoginSuccess();
     }
-  }, [user, isAdmin, onLoginSuccess]);
+  }, [isAdmin, onLoginSuccess]);
 
   // Check if error is unauthorized domain
   const isUnauthorizedDomain = (authError && authError.startsWith('UNAUTHORIZED_DOMAIN:')) ||
@@ -73,6 +71,35 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
       setTimeout(() => setCopiedDomain(false), 2500);
     } catch {
       // fallback
+    }
+  };
+
+  const handleAutofillCredentials = () => {
+    setEmail(ADMIN_EMAIL);
+    setPassword(MASTER_ADMIN_PASS);
+    setLocalError(null);
+    clearAuthError();
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoadingEmail(true);
+    setLocalError(null);
+    clearAuthError();
+    setResetSentMessage(null);
+
+    try {
+      await loginWithEmail(email, password);
+      onLoginSuccess();
+    } catch (err: any) {
+      console.error('Email sign in catch:', err);
+      if (email.trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() && password.trim() !== MASTER_ADMIN_PASS) {
+        setLocalError('Incorrect password. For direct access, enter password: haven2026');
+      } else {
+        setLocalError(err.message || 'Authentication error. Please check your credentials.');
+      }
+    } finally {
+      setLoadingEmail(false);
     }
   };
 
@@ -91,31 +118,6 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
       }
     } finally {
       setLoadingGoogle(false);
-    }
-  };
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoadingEmail(true);
-    setLocalError(null);
-    clearAuthError();
-    setResetSentMessage(null);
-
-    try {
-      await loginWithEmail(email, password);
-      onLoginSuccess();
-    } catch (err: any) {
-      console.error('Email sign in catch:', err);
-      if (
-        err.code === 'auth/user-not-found' || 
-        err.code === 'auth/invalid-credential' || 
-        err.code === 'auth/wrong-password'
-      ) {
-        // Automatically open the secure setup guide so they can create or check user in Firebase
-        setShowSetupGuide(true);
-      }
-    } finally {
-      setLoadingEmail(false);
     }
   };
 
@@ -154,27 +156,35 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
             Administrator Login
           </h1>
           <p className="text-xs text-[#736C61]">
-            Restricted access for store founders and authorized management.
+            Direct secure access for store founders <strong>Garvit Sharma</strong> &amp; <strong>Ankit Meena</strong>.
           </p>
         </div>
 
-        {/* Authorized Admins Badge */}
-        <div className="bg-[#F5F2EB] border border-[#E3DDD1] p-3 text-xs text-[#615A50] space-y-1">
-          <div className="flex items-center gap-1.5 font-semibold text-[#1A1918]">
-            <Sparkles className="w-3.5 h-3.5 text-[#C5A880]" />
-            <span>Authorized Administrator Accounts:</span>
+        {/* Direct Instant Access Badge */}
+        <div className="bg-[#F5F2EB] border border-[#E3DDD1] p-3 text-xs text-[#615A50] space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-semibold text-[#1A1918]">
+              <Zap className="w-3.5 h-3.5 text-[#C5A880]" />
+              <span>Direct Founder Login (Instant)</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleAutofillCredentials}
+              className="text-[10px] bg-[#1A1918] text-[#FAF9F5] px-2 py-0.5 uppercase tracking-wider font-semibold hover:bg-[#33312E] transition-colors"
+            >
+              Autofill
+            </button>
           </div>
-          <div className="space-y-0.5 pt-0.5">
-            {APPROVED_ADMIN_EMAILS.map((approvedEmail) => (
-              <p key={approvedEmail} className="font-mono text-[11px] text-[#8C6D45] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#C5A880]" />
-                {approvedEmail}
-              </p>
-            ))}
+          <div className="space-y-1 pt-1 border-t border-[#E8E2D5] text-[11px] font-mono">
+            <div className="flex items-center justify-between text-[#8C6D45]">
+              <span>Email:</span>
+              <strong className="text-[#1A1918]">{ADMIN_EMAIL}</strong>
+            </div>
+            <div className="flex items-center justify-between text-[#8C6D45]">
+              <span>Password:</span>
+              <strong className="text-[#1A1918]">haven2026</strong>
+            </div>
           </div>
-          <p className="text-[10px] text-[#7A7367] pt-1">
-            Protected by Firebase Auth &amp; Cloud Firestore Security Rules.
-          </p>
         </div>
 
         {/* Status Messages */}
@@ -185,7 +195,7 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
           </div>
         )}
 
-        {/* Standard Error Notice (non-domain error) */}
+        {/* Standard Error Notice */}
         {!isUnauthorizedDomain && (localError || authError) && (
           <div className="p-3.5 bg-[#FAF0F0] border border-[#F3C5C5] text-[#C53030] text-xs flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -199,97 +209,105 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
         )}
 
         {/* =========================================================================
-            SPECIAL: Firebase auth/unauthorized-domain Helper Card
-            Fixes the exact Firebase OAuth Authorized Domains issue on Cloud Run & Vercel
+            METHOD 1: DIRECT EMAIL & PASSWORD LOGIN (PRIMARY)
+            Opens admin dashboard immediately with havenclothingindia@gmail.com / haven2026
             ========================================================================= */}
-        {isUnauthorizedDomain && (
-          <div className="p-4 bg-[#FFFBEB] border border-[#FCD34D] text-[#92400E] text-xs space-y-3 shadow-xs">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
-              <div>
-                <strong className="block text-[#78350F] text-xs uppercase tracking-wider font-semibold">
-                  Google Auth: Domain Authorization Required
-                </strong>
-                <p className="text-[11px] text-[#92400E] mt-0.5 leading-relaxed">
-                  Firebase Google OAuth requires your current domain to be whitelisted in your Firebase Console.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white p-2.5 border border-[#FDE68A] space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] uppercase font-semibold text-[#78350F]">
-                  Current Domain:
-                </span>
-                <span className="font-mono text-[11px] text-[#1A1918] bg-[#F5F2EB] px-2 py-0.5 border border-[#E3DDD1] truncate max-w-[200px]">
-                  {domainToAuthorize}
-                </span>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleCopyDomain}
-                  className="flex-1 py-1.5 px-2 bg-[#F3EFE7] hover:bg-[#EAE4D8] text-[11px] font-medium text-[#1A1918] flex items-center justify-center gap-1.5 transition-colors border border-[#DDD5C6]"
-                >
-                  {copiedDomain ? (
-                    <>
-                      <Check className="w-3.5 h-3.5 text-green-600" />
-                      <span className="text-green-700 font-semibold">Domain Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5 text-[#736C61]" />
-                      <span>Copy Domain</span>
-                    </>
-                  )}
-                </button>
-
-                <a
-                  href={`https://console.firebase.google.com/project/${firebaseProjectId}/authentication/settings`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 py-1.5 px-2 bg-[#1A1918] hover:bg-[#33312E] text-[11px] font-medium text-[#FAF9F5] flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <span>Open Console</span>
-                  <ExternalLink className="w-3 h-3 text-[#C5A880]" />
-                </a>
-              </div>
-            </div>
-
-            <div className="text-[11px] space-y-1 text-[#78350F] pl-1">
-              <p className="font-semibold">Quick Fix Steps (30 seconds):</p>
-              <ol className="list-decimal pl-4 space-y-0.5 text-[10px]">
-                <li>Click <strong>Open Console</strong> &gt; go to <strong>Authorized domains</strong>.</li>
-                <li>Click <strong>Add domain</strong> and paste <code className="bg-white px-1 font-mono text-[9px]">{domainToAuthorize}</code> (also add <code className="bg-white px-1 font-mono text-[9px]">vercel.app</code> for Vercel).</li>
-                <li>Click <strong>Add</strong>. Google Login will work immediately!</li>
-              </ol>
-            </div>
-
-            <div className="pt-1 border-t border-[#FDE68A] text-[11px] text-[#78350F] font-medium flex items-center justify-between">
-              <span>Immediate alternative:</span>
-              <span className="text-[#1A1918] underline font-semibold">
-                Use Email &amp; Password Login below ↓
+        <form onSubmit={handleEmailSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs uppercase tracking-wider text-[#575147] font-semibold">
+                Admin Email
+              </label>
+              <span className="text-[10px] text-[#8C6D45] font-mono">
+                Official Account
               </span>
             </div>
+            <div className="flex items-center border border-[#DDD5C6] bg-white focus-within:border-[#1A1918]">
+              <span className="px-3 text-[#8C8477]">
+                <Mail className="w-4 h-4" />
+              </span>
+              <input
+                type="email"
+                required
+                placeholder="havenclothingindia@gmail.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-2 py-2.5 text-xs text-[#1A1918] focus:outline-none"
+              />
+            </div>
           </div>
-        )}
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs uppercase tracking-wider text-[#575147] font-semibold">
+                Admin Password
+              </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={loadingReset}
+                className="text-[10px] text-[#8C6D45] hover:underline hover:text-[#1A1918]"
+              >
+                {loadingReset ? 'Sending...' : 'Forgot password?'}
+              </button>
+            </div>
+            <div className="flex items-center border border-[#DDD5C6] bg-white focus-within:border-[#1A1918]">
+              <span className="px-3 text-[#8C8477]">
+                <Lock className="w-4 h-4" />
+              </span>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                placeholder="haven2026"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-2 py-2.5 text-xs text-[#1A1918] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="px-3 text-[#8C8477] hover:text-[#1A1918] transition-colors"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loadingEmail || loadingGoogle}
+            className="w-full py-3.5 bg-[#1A1918] hover:bg-[#33312E] disabled:bg-[#7D766C] text-[#FAF9F5] text-xs uppercase tracking-widest font-semibold flex items-center justify-center gap-2 transition-colors shadow-md cursor-pointer"
+          >
+            {loadingEmail ? (
+              <Loader2 className="w-4 h-4 animate-spin text-[#C5A880]" />
+            ) : (
+              <>
+                <span>Sign In to Admin Dashboard</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Divider */}
+        <div className="relative flex items-center justify-center my-3">
+          <div className="border-t border-[#E3DDD1] w-full" />
+          <span className="bg-[#FAF9F5] px-3 text-[10px] uppercase tracking-widest text-[#8C8477]">
+            Or Sign In With Google
+          </span>
+          <div className="border-t border-[#E3DDD1] w-full" />
+        </div>
 
         {/* =========================================================================
-            METHOD 1: GOOGLE FIREBASE AUTHENTICATION
+            METHOD 2: GOOGLE FIREBASE AUTHENTICATION (SECONDARY)
             ========================================================================= */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-[#736C61] font-semibold">
-              Method 1 • Quick Admin Sign-In
-            </span>
-          </div>
-
           <button
             type="button"
             onClick={handleGoogleSignIn}
             disabled={loadingGoogle || loadingEmail}
-            className="w-full py-3 px-4 bg-white border border-[#DDD5C6] hover:bg-[#F2ECE1] disabled:opacity-60 text-xs uppercase tracking-wider font-semibold text-[#1A1918] flex items-center justify-center gap-2.5 transition-colors shadow-xs"
+            className="w-full py-2.5 px-4 bg-white border border-[#DDD5C6] hover:bg-[#F2ECE1] disabled:opacity-60 text-xs uppercase tracking-wider font-semibold text-[#1A1918] flex items-center justify-center gap-2.5 transition-colors shadow-xs"
           >
             {loadingGoogle ? (
               <Loader2 className="w-4 h-4 animate-spin text-[#1A1918]" />
@@ -313,182 +331,56 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({ onLoginSuccess, 
                 />
               </svg>
             )}
-            <span>{loadingGoogle ? 'Verifying with Google...' : 'Sign in with Google'}</span>
+            <span>{loadingGoogle ? 'Verifying...' : 'Sign in with Google'}</span>
           </button>
         </div>
 
-        {/* Divider */}
-        <div className="relative flex items-center justify-center my-4">
-          <div className="border-t border-[#E3DDD1] w-full" />
-          <span className="bg-[#FAF9F5] px-3 text-[10px] uppercase tracking-widest text-[#8C8477]">
-            Or With Email &amp; Password
-          </span>
-          <div className="border-t border-[#E3DDD1] w-full" />
-        </div>
-
-        {/* =========================================================================
-            METHOD 2: EMAIL & PASSWORD FIREBASE AUTHENTICATION
-            (Works on ALL domains including Vercel without domain whitelist errors)
-            ========================================================================= */}
-        <form onSubmit={handleEmailSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs uppercase tracking-wider text-[#575147] font-semibold">
-                Admin Email
-              </label>
-              <span className="text-[10px] text-[#8C6D45] font-mono">
-                Official Admin
-              </span>
-            </div>
-            <div className="flex items-center border border-[#DDD5C6] bg-white focus-within:border-[#1A1918]">
-              <span className="px-3 text-[#8C8477]">
-                <Mail className="w-4 h-4" />
-              </span>
-              <input
-                type="email"
-                required
-                placeholder="havenclothingindia@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-2 py-2.5 text-xs text-[#1A1918] focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <label className="text-xs uppercase tracking-wider text-[#575147] font-semibold">
-                Firebase Admin Password
-              </label>
-              <button
-                type="button"
-                onClick={handleForgotPassword}
-                disabled={loadingReset}
-                className="text-[10px] text-[#8C6D45] hover:underline hover:text-[#1A1918]"
-              >
-                {loadingReset ? 'Sending reset link...' : 'Forgot password?'}
-              </button>
-            </div>
-            <div className="flex items-center border border-[#DDD5C6] bg-white focus-within:border-[#1A1918]">
-              <span className="px-3 text-[#8C8477]">
-                <Lock className="w-4 h-4" />
-              </span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={6}
-                placeholder="••••••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-2 py-2.5 text-xs text-[#1A1918] focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="px-3 text-[#8C8477] hover:text-[#1A1918] transition-colors"
-                title={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loadingEmail || loadingGoogle}
-            className="w-full py-3.5 bg-[#1A1918] hover:bg-[#33312E] disabled:bg-[#7D766C] text-[#FAF9F5] text-xs uppercase tracking-widest font-semibold flex items-center justify-center gap-2 transition-colors shadow-md"
-          >
-            {loadingEmail ? (
-              <Loader2 className="w-4 h-4 animate-spin text-[#C5A880]" />
-            ) : (
-              <>
-                <span>Sign In to Admin Dashboard</span>
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </button>
-        </form>
-
-        {/* =========================================================================
-            SECURE FIREBASE USER SETUP GUIDE
-            (Explains how to securely create admin password in Firebase Console)
-            ========================================================================= */}
-        <div className="pt-2 border-t border-[#EAE4D8]">
-          <button
-            type="button"
-            onClick={() => setShowSetupGuide(!showSetupGuide)}
-            className="w-full text-left py-2 px-3 bg-[#F5F2EB] hover:bg-[#EAE4D8] border border-[#DDD5C6] flex items-center justify-between text-xs text-[#615A50] transition-colors"
-          >
-            <span className="flex items-center gap-1.5 font-medium">
-              <Key className="w-3.5 h-3.5 text-[#C5A880]" />
-              <span>First-time setup? How to create password in Firebase</span>
-            </span>
-            <span className="text-[10px] text-[#8C6D45] uppercase tracking-wider font-semibold">
-              {showSetupGuide ? 'Hide Guide' : 'View Steps'}
-            </span>
-          </button>
-
-          {showSetupGuide && (
-            <div className="mt-2.5 p-3.5 bg-white border border-[#E3DDD1] text-xs text-[#575147] space-y-2.5 shadow-xs">
-              <div className="flex items-center justify-between border-b border-[#EAE4D8] pb-1.5">
-                <span className="font-semibold text-[#1A1918]">Secure Firebase Authentication Setup</span>
-                <span className="text-[10px] bg-[#FAF0F0] text-[#C53030] px-1.5 py-0.5 font-medium border border-[#F3C5C5]">
-                  Zero Public Signup
-                </span>
-              </div>
-
-              <p className="text-[11px] text-[#736C61] leading-relaxed">
-                To guarantee maximum security, admin passwords are <strong>never hardcoded</strong> in JavaScript. Create your admin password directly inside Google Firebase:
-              </p>
-
-              <ol className="list-decimal pl-4 space-y-1.5 text-[11px] text-[#423D36]">
-                <li>
-                  Open{' '}
-                  <a
-                    href={`https://console.firebase.google.com/project/${firebaseProjectId}/authentication/users`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#8C6D45] hover:underline font-semibold inline-flex items-center gap-0.5"
-                  >
-                    Firebase Console &gt; Authentication &gt; Users
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </a>.
-                </li>
-                <li>
-                  Click the <strong>&quot;Add user&quot;</strong> button.
-                </li>
-                <li>
-                  Enter Email: <code className="bg-[#F5F2EB] px-1 py-0.5 text-[#1A1918] font-mono text-[10px]">havenclothingindia@gmail.com</code> and set your preferred private password.
-                </li>
-                <li>
-                  Verify under{' '}
-                  <a
-                    href={`https://console.firebase.google.com/project/${firebaseProjectId}/authentication/providers`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#8C6D45] hover:underline font-semibold inline-flex items-center gap-0.5"
-                  >
-                    Sign-in method
-                    <ExternalLink className="w-2.5 h-2.5" />
-                  </a>{' '}
-                  that <strong>Email/Password</strong> status is <strong>Enabled</strong>.
-                </li>
-                <li>
-                  Return to this portal, enter the password you just created, and sign in.
-                </li>
-              </ol>
-
-              <div className="bg-[#F8F6F0] p-2 border border-[#E8E2D5] text-[10px] text-[#7A7367]">
-                <strong>Vercel Compatibility:</strong> Email/Password authentication works seamlessly on any domain (including Vercel &amp; custom domains) without needing OAuth domain allowlisting.
+        {/* Domain helper banner if Google OAuth error occurs */}
+        {isUnauthorizedDomain && (
+          <div className="p-3.5 bg-[#FFFBEB] border border-[#FCD34D] text-[#92400E] text-xs space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-[#D97706] shrink-0 mt-0.5" />
+              <div>
+                <strong className="block text-[#78350F] text-xs">
+                  Google Auth Domain Notice
+                </strong>
+                <p className="text-[11px] text-[#92400E] mt-0.5">
+                  Current domain <code className="bg-white px-1 font-mono">{domainToAuthorize}</code> needs to be added in Firebase Authorized Domains for Google Sign-In.
+                </p>
               </div>
             </div>
-          )}
-        </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleCopyDomain}
+                className="flex-1 py-1 px-2 bg-white hover:bg-[#F3EFE7] text-[11px] font-medium text-[#1A1918] flex items-center justify-center gap-1 border border-[#DDD5C6]"
+              >
+                {copiedDomain ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Copy className="w-3.5 h-3.5 text-[#736C61]" />}
+                <span>{copiedDomain ? 'Copied' : 'Copy Domain'}</span>
+              </button>
+
+              <a
+                href={`https://console.firebase.google.com/project/${firebaseProjectId}/authentication/settings`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 py-1 px-2 bg-[#1A1918] text-[#FAF9F5] text-[11px] font-medium flex items-center justify-center gap-1"
+              >
+                <span>Firebase Console</span>
+                <ExternalLink className="w-3 h-3 text-[#C5A880]" />
+              </a>
+            </div>
+
+            <p className="text-[10px] text-[#78350F] italic">
+              Tip: Direct login above works instantly without requiring domain authorization!
+            </p>
+          </div>
+        )}
 
         {/* Footer Navigation */}
-        <div className="flex items-center justify-between text-xs text-[#7A7367] pt-2">
+        <div className="flex items-center justify-between text-xs text-[#7A7367] pt-2 border-t border-[#EAE4D8]">
           <span className="text-[10px] text-[#8C8375]">
-            HAVEN CLOTHING Atelier &bull; 2026
+            HAVEN CLOTHING &bull; Jaipur &amp; Delhi
           </span>
           <button
             type="button"
