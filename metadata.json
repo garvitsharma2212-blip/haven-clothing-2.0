@@ -1,0 +1,8 @@
+{
+  "name": "Remix HAVEN CLOTHING | Wear Your Comfort. Define Your Style.",
+  "description": "Premium minimalist fashion brand founded by Garvit Sharma and Ankit Meena. Luxury oversized t-shirts, waffle knits, and heavy cotton sweatshirts in India.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

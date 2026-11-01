@@ -1,0 +1,115 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Premium apparel product for HAVEN CLOTHING",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "slug": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "enum": ["oversized-t-shirts", "waffle-t-shirts", "sweatshirts", "essentials"] },
+        "description": { "type": "string", "maxLength": 4000 },
+        "price": { "type": "number" },
+        "discountedPrice": { "type": "number" },
+        "images": { "type": "array" },
+        "sizes": { "type": "array" },
+        "colors": { "type": "array" },
+        "stock": { "type": "number" },
+        "isFeatured": { "type": "boolean" },
+        "isBestseller": { "type": "boolean" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "slug", "category", "description", "price", "images", "sizes", "stock", "isActive"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order placed with Cash on Delivery (COD)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "orderNumber": { "type": "string", "maxLength": 64 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 20 },
+        "email": { "type": "string", "maxLength": 150 },
+        "address": { "type": "string", "maxLength": 500 },
+        "city": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 100 },
+        "pincode": { "type": "string", "maxLength": 10 },
+        "orderNotes": { "type": "string", "maxLength": 1000 },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["COD"] },
+        "paymentStatus": { "type": "string", "enum": ["PENDING", "PAID", "CANCELLED"] },
+        "orderStatus": { "type": "string", "enum": ["NEW", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"] },
+        "trackingNumber": { "type": "string", "maxLength": 100 },
+        "trackingCarrier": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "customerName", "phone", "address", "city", "state", "pincode", "items", "totalAmount", "paymentMethod", "paymentStatus", "orderStatus"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product category specification",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "slug": { "type": "string", "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 500 },
+        "image": { "type": "string", "maxLength": 1000 }
+      },
+      "required": ["name", "slug"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized administrator or founder account",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 150 },
+        "name": { "type": "string", "maxLength": 150 },
+        "role": { "type": "string", "enum": ["admin", "founder"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Global store and brand settings",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string", "maxLength": 100 },
+        "tagline": { "type": "string", "maxLength": 200 },
+        "supportEmail": { "type": "string", "maxLength": 150 },
+        "shippingFee": { "type": "number" },
+        "freeShippingThreshold": { "type": "number" },
+        "announcement": { "type": "string", "maxLength": 300 }
+      }
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Store apparel products catalog"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer COD and online purchase orders"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Product collection categories"
+    },
+    "/adminUsers/{adminId}": {
+      "schema": "AdminUser",
+      "description": "Whitelisted store administrators and founders"
+    },
+    "/settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Store configuration and policies"
+    }
+  }
+}
